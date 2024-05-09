@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
-import { Component, inject } from '@angular/core';
-import { RouterOutlet } from '@angular/router';
-import { combineLatest, interval, map, tap } from 'rxjs';
+import { Component, computed, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { combineLatest, interval, map, startWith, tap } from 'rxjs';
 
 interface Geo {
   lat: string;
@@ -37,39 +37,82 @@ interface User {
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, CommonModule],
+  imports: [CommonModule],
   template: `
-    <h1>{{ title }}</h1>
-    <router-outlet></router-outlet>
+    <!-- Idiomatic Reactive Data Stream -->
     @if (viewModel$ | async; as viewModel) {
-    <h2>Users</h2>
+    <h2>RxJs</h2>
     <ul>
       @for (user of viewModel.users; track $index) {
       <li>{{ user.name }}</li>
       <ul>
         @if(viewModel.interval) {
-          <li>{{ user.email }}</li>
+        <li>{{ user.email }}</li>
         }
       </ul>
       }
     </ul>
     }
+
+    <!-- interop Observable to Signal -->
+    <h2>RxJs & Signals & Interop</h2>
+    <ul>
+      @for (user of usersInteropSignal(); track $index) {
+      <li>{{ user.name }}</li>
+      <ul>
+        @if(intervalSignal()) {
+        <li>{{ user.email }}</li>
+        }
+      </ul>
+      }
+    </ul>
+
+    <!-- Signal & Computed & Interop-->
+    <h2>Signals & Computed & Interop</h2>
+    <ul>
+      @for (user of usersInteropSignal(); track $index) {
+      <li>{{ user.name }}</li>
+      <ul>
+        @if(isEvenSignal()) {
+        <li>{{ user.email }}</li>
+        }
+      </ul>
+      }
+    </ul>
   `,
   styles: [``],
 })
 export class AppComponent {
-  title = 'zoneless';
-
   httpClient = inject(HttpClient);
+  // Mocking Some Service call
+  fetchUsers$ = this.httpClient.get<User[]>(
+    'https://jsonplaceholder.typicode.com/users'
+  );
 
+  // Idiomatic Reactive Data Streams
   viewModel$ = combineLatest({
-    users: this.fetchUsers(),
-    interval: interval(1000).pipe(map((value) => value % 2 === 0)),
+    users: this.fetchUsers$,
+    interval: interval(3000).pipe(
+      map((value) => value % 2 === 0),
+      startWith(false)
+    ),
   }).pipe(tap(console.log));
+  // END Idiomatic Reactive Data Streams
 
-  fetchUsers() {
-    return this.httpClient.get<User[]>(
-      'https://jsonplaceholder.typicode.com/users'
-    );
+  // interop Observable to Signal
+  usersInteropSignal = toSignal(this.fetchUsers$);
+  intervalSignal = toSignal(
+    interval(3000).pipe(map((value) => value % 2 === 0))
+  );
+  // END interop Observable to Signal
+
+  // Only Signals and Computed
+  tickSignal = signal(1);
+  isEvenSignal = computed(() => this.tickSignal() % 2 === 0);
+  ngOnInit() {
+    setInterval(() => {
+      this.tickSignal.update((current) => current + 1);
+    }, 3000);
   }
+  // END Only Signals and Computed
 }
